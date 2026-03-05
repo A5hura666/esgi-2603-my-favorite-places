@@ -14,6 +14,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - favorite_places_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 
   server:
@@ -22,7 +28,8 @@ services:
     container_name: favorite_places_server
     restart: always
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_USER: postgres
@@ -38,8 +45,6 @@ services:
       context: ./client
     container_name: favorite_places_client
     restart: always
-    depends_on:
-      - server
     ports:
       - "5173:80"
     networks:
