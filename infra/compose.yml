@@ -1,0 +1,25 @@
+services:
+  manager:
+    image: docker:dind
+    container_name: manager
+    privileged: true
+    networks:
+      - swarm-network
+
+  node1:
+    image: docker:dind
+    container_name: node1
+    privileged: true
+    networks:
+      - swarm-network
+
+  node2:
+    image: docker:dind
+    container_name: node2
+    privileged: true
+    networks:
+      - swarm-network
+
+networks:
+  swarm-network:
+    driver: bridge
