@@ -78,3 +78,29 @@ résultat : affichage de la liste des nodes du cluster Swarm avec leur statut et
 
 ![visualisation-cluster.png](images/visualisation-cluster.png)
 
+### Création stack hello-world.compose.yml 
+
+commande : création d'un fichier `hello-world.compose.yml` pour créer une stack hello-world avec un service qui utilise l'image `hello-world`.
+
+```YAML
+services:
+  hello-world:
+    image: hello-world
+    deploy:
+      replicas: 2
+```
+
+### Installation nano
+commande : apk add nano
+résultat : installation de l'éditeur de texte nano pour éditer le fichier hello-world.compose.yml.
+
+![installation-nano.png](images/installation-nano.png)
+
+### Création répertoire manager dans home
+commande : cd /home && mkdir manager
+résultat : création d'un répertoire manager dans le home du manager pour stocker le fichier
+
+se déplacer dans le répertoire manager
+commande : cd manager
+commande : touch hello-world.compose.yml
+résultat : création du fichier hello-world.compose.yml dans le répertoire manager.
