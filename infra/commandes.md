@@ -12,26 +12,16 @@ services:
     image: docker:dind
     container_name: manager
     privileged: true
-    networks:
-      - swarm-network
 
   node1:
     image: docker:dind
     container_name: node1
     privileged: true
-    networks:
-      - swarm-network
-
+    
   node2:
     image: docker:dind
     container_name: node2
     privileged: true
-    networks:
-      - swarm-network
-
-networks:
-  swarm-network:
-    driver: bridge
 ```
 
 résultat : configuration d'un fichier de configuration docker-compose.yml pour créer un cluster Swarm avec un manager et deux nodes.
@@ -84,8 +74,8 @@ commande : création d'un fichier `hello-world.compose.yml` pour créer une stac
 
 ```YAML
 services:
-  hello-world:
-    image: hello-world
+  hello:
+    image: nmatsui/hello-world-api
     deploy:
       replicas: 2
 ```
@@ -104,3 +94,9 @@ se déplacer dans le répertoire manager
 commande : cd manager
 commande : touch hello-world.compose.yml
 résultat : création du fichier hello-world.compose.yml dans le répertoire manager.
+
+### Déploiement de la stack hello-world
+commande : docker stack deploy --compose-file hello-world.compose.yml hello-world
+résultat : déploiement de la stack hello-world avec succès.
+
+commentaire : on peut changer le compose en indiquant sur quelle node on veut déployer le service hello-world en ajoutant la ligne `placement: constraints: [node.role == {NOM_NODE}]` dans le fichier hello-world.compose.yml
