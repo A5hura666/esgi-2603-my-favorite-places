@@ -187,5 +187,14 @@ afin que les autres machines puissent le joindre correctement. De plus, la comma
 au lieu d’un nom de service ou d’hôte Docker. Enfin, il est nécessaire de s’assurer que les ports utilisés par Docker Swarm (2377, 7946 et 4789) 
 sont ouverts entre les machines pour permettre la communication du cluster.
 
-### 
+### Ansible et Terraform sont souvent utilisés ensemble, à quoi sert cet outil ?
+
+Terraform est un outil permettant de gérer son infrastructure avec du code, c’est ce qu’on appelle l’infrastructure as code (IaC).
+Il permet de créer, modifier et supprimer des ressources d’infrastructure de manière déclarative, en utilisant des fichiers de configuration.
+
+J'ai déjà pu voir cela dans l'une de mes anciennes boite ou l'on travaillait avec AWS et on utilisait Terraform pour créer et gérer notre infrastructure sur AWS (EC2, S3, RDS etc...).
+
+Pour ce qui est de l'utilisation avec Ansible, Terraform est souvent utilisé en complément d'Ansible pour mettre en place l'infrastructure nécessaire à l'exécution des playbooks Ansible.
+Par exemple, Terraform peut être utilisé pour créer des machines virtuelles ou des conteneurs Docker sur lesquels Ansible va ensuite se connecter pour configurer les applications ou les services.
+Terraform s'occupe de la partie infrastructure, tandis qu'Ansible s'occupe de la partie configuration et déploiement des applications.
 
