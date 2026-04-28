@@ -1,0 +1,64 @@
+services:
+  vote:
+    image: dockersamples/examplevotingapp_vote
+    networks:
+      - front-tier
+      - web
+    deploy:
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.vote.rule=Host(`vote.swarm.localhost`)"
+        - "traefik.http.routers.vote.entrypoints=web"
+        - "traefik.http.services.vote.loadbalancer.server.port=80"
+
+  result:
+    image: dockersamples/examplevotingapp_result
+    networks:
+      - back-tier
+      - web
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.result.rule=Host(`result.swarm.localhost`)"
+        - "traefik.http.routers.result.entrypoints=web"
+        - "traefik.http.services.result.loadbalancer.server.port=80"
+
+  worker:
+    image: dockersamples/examplevotingapp_worker
+    networks:
+      - front-tier
+      - back-tier
+    deploy:
+      replicas: 1
+
+  redis:
+    image: redis:alpine
+    networks:
+      - front-tier
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - back-tier
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  db_data:
+
+networks:
+  front-tier:
+    driver: overlay
+  back-tier:
+    driver: overlay
+  web:
+    external: true

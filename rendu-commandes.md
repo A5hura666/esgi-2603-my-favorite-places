@@ -273,3 +273,115 @@ Aller sur http://traefik.swarm.localhost et http://whoami.swarm.localhost pour v
 
 ![traefik_traefik.png](images/traefik/traefik_traefik.png)
 
+## Exercice 2 - Déployer une autre application
+
+### Récupération de l'image de l'application example-voting-app
+
+commande : `git clone https://github.com/dockersamples/example-voting-app.git` 
+
+### Lancer l'application example-voting-app sans cluster Swarm
+
+commentaire : se déplacer dans le répertoire de l'application example-voting-app et lancer l'application en utilisant Docker Compose.
+
+commande : `docker compose up -d`
+
+### Création d'un fichier docker-compose.yml pour déployer l'application example-voting-app
+
+```YAML
+services:
+  vote:
+    image: dockersamples/examplevotingapp_vote
+    networks:
+      - front-tier
+      - web
+    deploy:
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.vote.rule=Host(`vote.swarm.localhost`)"
+        - "traefik.http.routers.vote.entrypoints=web"
+        - "traefik.http.services.vote.loadbalancer.server.port=80"
+
+  result:
+    image: dockersamples/examplevotingapp_result
+    networks:
+      - back-tier
+      - web
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.result.rule=Host(`result.swarm.localhost`)"
+        - "traefik.http.routers.result.entrypoints=web"
+        - "traefik.http.services.result.loadbalancer.server.port=80"
+
+  worker:
+    image: dockersamples/examplevotingapp_worker
+    networks:
+      - front-tier
+      - back-tier
+    deploy:
+      replicas: 1
+
+  redis:
+    image: redis:alpine
+    networks:
+      - front-tier
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - back-tier
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  db_data:
+
+networks:
+  front-tier:
+    driver: overlay
+  back-tier:
+    driver: overlay
+  web:
+    external: true
+```
+
+### Déployer l'application example-voting-app sur le cluster Swarm
+
+commentaire : après avoir créé le fichier docker-compose.yml voting-stack.yml 
+il est nécessaire de se connecter au manager et de déployer la stack en utilisant le fichier de configuration de l'application example-voting-app qui a été créé précédemment.
+
+commande : `docker cp voting-stack.yml infra-manager-1:/voting-stack.yml`
+
+commande : `docker exec -it infra-manager-1 ash`
+
+commande : `docker stack deploy --compose-file voting-stack.yml voting`
+
+### Mettre à jour le fichier host
+
+commande : ajouter les entrées suivantes dans le fichier host
+```BASH
+127.0.0.1   vote.swarm.localhost
+127.0.0.1   result.swarm.localhost
+```
+
+### Vérification du déploiement de l'application example-voting-app
+
+commande : `docker exec infra-manager-1 docker stack services voting`
+
+commentaire : aller sur http://vote.swarm.localhost et http://result.swarm.localhost 
+pour vérifier que l'application example-voting-app est bien configurée et que les services sont accessibles depuis l'extérieur du cluster Swarm.
+
+![result-swarm-localhost.png](images/traefik/result-swarm-localhost.png)
+
+![vote-swarm-localhost.png](images/traefik/vote-swarm-localhost.png)
+
+
