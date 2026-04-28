@@ -198,3 +198,78 @@ Pour ce qui est de l'utilisation avec Ansible, Terraform est souvent utilisé en
 Par exemple, Terraform peut être utilisé pour créer des machines virtuelles ou des conteneurs Docker sur lesquels Ansible va ensuite se connecter pour configurer les applications ou les services.
 Terraform s'occupe de la partie infrastructure, tandis qu'Ansible s'occupe de la partie configuration et déploiement des applications.
 
+
+## Exercice 1 - Déployer Traefik
+
+### Mapping de port 
+
+commentaire : on va faire en sorte de rajouter un mapping de port pour que Traefik puisse être accessible depuis l'extérieur du cluster Swarm sur le port 80.
+
+```YAML
+services:
+  manager:
+    build: .
+    privileged: true
+    ports:
+      - "80:80"
+
+node:
+  build: .
+  privileged: true
+```
+
+### Modification du fichier host
+
+commentaire : on va faire en sorte de rajouter deux entrées dans le fichier host pour que Traefik 
+puisse être accessible depuis l'extérieur du cluster Swarm en utilisant les noms de domaine traefik.swarm.localhost et whoami.swarm.localhost
+
+```BASH
+127.0.0.1   traefik.swarm.localhost
+127.0.0.1   whoami.swarm.localhost
+```
+
+### Lancement du cluster Swarm 
+commande : `docker compose up --scale node=3 -d`
+commande : `./ansible.sh`
+
+### Création d'un réseau Docker pour Traefik
+commentaire : pour que Traefik puisse communiquer avec les services du cluster Swarm, il est nécessaire de créer un réseau Docker de type overlay qui sera utilisé par Traefik pour communiquer avec les services du cluster Swarm.
+
+commande : `docker exec infra-manager-1 docker network create --driver overlay --attachable web`
+
+résultat : yotabar8jzopmsxclymltxciu
+
+### Copier le fichier de configuration de Traefik dans le manager
+
+commentaire : pour que Traefik puisse être configuré correctement, il est nécessaire de copier le fichier de configuration de Traefik dans le manager pour que Traefik puisse le lire et se configurer en conséquence.
+
+commande : `docker cp traefik-stack.yml infra-manager-1:/traefik-stack.yml`
+
+résultat : Successfully copied 4.1kB to infra-manager-1:/traefik-stack.yml
+
+
+### Déployer la stack depuis le manager
+
+commentaire : pour déployer la stack Traefik, il est nécessaire de se connecter au manager et de déployer la stack en utilisant le fichier de configuration de Traefik qui a été copié précédemment.
+
+commande : `docker exec -it infra-manager-1 ash`
+
+commande : `docker stack deploy --compose-file traefik-stack.yml traefik`
+
+résultat : Since --detach=false was not specified, tasks will be created in the background.
+In a future release, --detach=false will become the default.
+Creating service traefik_traefik
+Creating service traefik_whoami
+
+### Vérification du déploiement de la stack Traefik
+
+commande : `docker exec infra-manager-1 docker stack services traefik`
+
+résultat : ![deploy-traefik-stack.png](images/traefik/deploy-traefik-stack.png)
+
+Aller sur http://traefik.swarm.localhost et http://whoami.swarm.localhost pour vérifier que Traefik est bien configuré et que les services sont accessibles depuis l'extérieur du cluster Swarm.
+
+![traefik_whoami.png](images/traefik/traefik_whoami.png)
+
+![traefik_traefik.png](images/traefik/traefik_traefik.png)
+
