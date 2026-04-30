@@ -384,4 +384,106 @@ pour vérifier que l'application example-voting-app est bien configurée et que 
 
 ![vote-swarm-localhost.png](images/traefik/vote-swarm-localhost.png)
 
+## Exercice 3 - Déployer Portainer
+
+### Création d'un fichier docker-compose.yml pour déployer Portainer
+
+```YAML
+version: '3.2'
+
+services:
+  agent:
+    image: portainer/agent:lts
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+    networks:
+      - agent_network
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.platform.os == linux]
+
+  portainer:
+    image: portainer/portainer-ce:lts
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    ports:
+      - "9443:9443"
+      - "9000:9000"
+      - "8000:8000"
+    volumes:
+      - portainer_data:/data
+    networks:
+      - agent_network
+      - web
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.portainer.rule=Host(`portainer.swarm.localhost`)"
+        - "traefik.http.routers.portainer.entrypoints=web"
+        - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+
+
+networks:
+  agent_network:
+    external: true
+  web:
+    external: true
+
+volumes:
+  portainer_data:
+```
+
+commande : `docker exec infra-manager-1 docker network create --driver overlay --attachable agent_network`
+
+### Modifier le fichier host
+
+commande : ajouter l'entrée suivante dans le fichier host
+```BASH
+127.0.0.1   portainer.swarm.localhost
+```
+
+### Déployer Portainer sur le cluster Swarm
+
+commande : `docker cp portainer-stack.yml infra-manager-1:/portainer-stack.yml`
+
+commande : `docker exec -it infra-manager-1 ash`
+
+commande : `docker stack deploy --compose-file portainer-stack.yml portainer`
+
+### Vérification du déploiement de Portainer
+
+commande : `docker exec infra-manager-1 docker stack services portainer`
+
+commentaire : aller sur http://portainer.swarm.localhost pour vérifier que Portainer est bien configuré et que le service est accessible depuis l'extérieur du cluster Swarm.
+
+![portainer.png](images/portainer/portainer.png)
+
+### Suppression de la stack voting
+
+commadne : `docker exec -it infra-manager-1 ash`
+
+commande : `docker stack rm voting`
+
+### Mise en place de la stack voting avec Portainer
+
+commentaire : maintenant qu'on a supprimé la stack voting de notre cluster Swarm,
+on va faire en sorte de le déployer dans Portainer pour ce faire on va sur Portainer,
+on va ensuite aller dans la section "Stacks" et on va cliquer sur "Add stack" pour ajouter une nouvelle stack.
+Il va falloir lui donner un nom ici "voting" et ensuite on va copier le contenu du fichier voting-stack.yml dans la section "Web editor" 
+et ensuite on va cliquer sur "Deploy the stack" pour déployer la stack voting sur notre cluster Swarm.
+
+![deploy-voting-stack.png](images/portainer/deploy-voting-stack.png)
+
+### Vérification du déploiement de la stack voting avec Portainer
+
+commentaire : on peut ensuite aller dnas la section "Containers" 
+pour vérifier que les conteneurs de la stack voting sont bien en cours d'exécution et que les services sont accessibles depuis l'extérieur du cluster Swarm.
+
+![voting-container-status.png](images/portainer/voting-container-status.png)
 
