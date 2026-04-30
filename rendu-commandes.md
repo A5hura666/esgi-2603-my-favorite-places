@@ -1,3 +1,9 @@
+# Rendu des commandes
+
+BOURGUIGNEAU 
+ETHAN 
+M2 IW
+
 ## Exo 2-3 : Création du cluster Docker Swarm / Tests du cluster
 
 ### Création d'un cluster Swarm avec Docker Compose
@@ -487,3 +493,161 @@ pour vérifier que les conteneurs de la stack voting sont bien en cours d'exécu
 
 ![voting-container-status.png](images/portainer/voting-container-status.png)
 
+## Exercice 1 - Déployer MFP
+
+### Création de l'endpoint de l'API hello-world
+
+commentaire : ajout d'un fichier Hello.ts comme controller pour créer un endpoint de l'API hello-world qui retourne un message de bienvenue.
+
+```typescript
+import { Router } from "express";
+
+const helloRouter = Router();
+
+helloRouter.get("/", (req, res) => {
+    res.status(200).send("Bonjour !");
+});
+
+export default helloRouter;
+```
+
+Ensuite, dans le fichier router.ts, 
+il faut importer le controller Hello.ts 
+et l'ajouter à la route /hello pour que l'endpoint de l'API 
+hello-world soit accessible via l'URL http://localhost:3000/hello.
+
+```typescript
+apiRouter.use("/hello", helloRouter);
+```
+
+### Modification du github action pour ajouter un tag aux images docker que l'on push 
+
+commentaire : on va faire en sorte d'ajouter un tag aux images docker.
+Le tag sera composé du nom de l'image et du short SHA du commit pour pouvoir identifier facilement les images docker qui ont été push.
+
+```yaml
+name: MFP CI
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install backend dependencies
+        working-directory: ./server
+        run: npm install
+
+      - name: Run backend tests
+        working-directory: ./server
+        run: npm test
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get short SHA
+        id: vars
+        run: echo "sha_short=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build backend Docker image
+        run: |
+          docker build \
+            -t ghcr.io/a5hura666/favorite_places_server:latest \
+            -t ghcr.io/a5hura666/favorite_places_server:sha-${{ steps.vars.outputs.sha_short }} \
+            ./server
+
+      - name: Build frontend Docker image
+        run: |
+          docker build \
+            -t ghcr.io/a5hura666/favorite_places_client:latest \
+            -t ghcr.io/a5hura666/favorite_places_client:sha-${{ steps.vars.outputs.sha_short }} \
+            ./client
+
+      - name: Push backend image
+        run: |
+          docker push ghcr.io/a5hura666/favorite_places_server:latest
+          docker push ghcr.io/a5hura666/favorite_places_server:sha-${{ steps.vars.outputs.sha_short }}
+
+      - name: Push frontend image
+        run: |
+          docker push ghcr.io/a5hura666/favorite_places_client:latest
+          docker push ghcr.io/a5hura666/favorite_places_client:sha-${{ steps.vars.outputs.sha_short }}
+```
+
+commentaire : on peut maintenant push le code sur main et vérifier après le github action
+que les images docker ont bien été push avec un tag qui correspond au short SHA du commit.
+
+![docker-image-tag.png](images/CD/docker-image-tag.png)
+
+### Ajout dans Host mfp.swarm.localhost
+
+commentaire : pour pouvoir accéder à l'application MFP depuis l'extérieur du cluster Swarm,
+il est nécessaire d'ajouter une entrée dans le fichier host pour que l'application MFP puisse être accessible en utilisant le nom de domaine mfp.swarm.localhost.
+
+```BASH
+127.0.0.1   mfp.swarm.localhost
+```
+
+### Création d'un fichier docker-compose.yml pour déployer l'application MFP
+
+```YAML
+services:
+  api:
+    image: ghcr.io/a5hura666/favorite_places_server:sha-4bca2fc
+    networks:
+      - web
+      - app
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.mfp.rule=Host(`mfp.swarm.localhost`)"
+        - "traefik.http.routers.mfp.entrypoints=web"
+        - "traefik.http.services.mfp.loadbalancer.server.port=3000"
+  db:
+    image: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    environment:
+      POSTGRES_PASSWORD: supersecret
+    networks:
+      - app
+  
+networks:
+  web:
+    external: true
+  app:
+```
+
+### Déployer l'application MFP sur portainer
+
+commentaire : pour déployer l'application MFP, il est nécessaire de se connecter à Portainer,
+aller dans la section "Stacks" et cliquer sur "Add stack" pour ajouter une nouvelle
+stack. Il faut lui donner un nom ici "mfp" et ensuite copier le contenu du fichier docker-compose.yml 
+dans la section "Web editor" et cliquer sur "Deploy the stack" pour déployer l'application MFP sur notre cluster Swarm.
