@@ -668,3 +668,96 @@ stack. Il faut lui donner un nom ici "mfp" et ensuite copier le contenu du fichi
 dans la section "Web editor" et cliquer sur "Deploy the stack" pour déployer l'application MFP sur notre cluster Swarm.
 
 ![test-api.png](images/CD/test-api.png)
+
+## Exercice 2 - Ajouter Shepherd :
+
+commentaire : Ajout d'un fichier shepherd.compose.yml pour déployer Shepherd sur le cluster Swarm.
+
+```YAML
+version: "3"
+
+services:
+  app:
+    image: containrrr/shepherd
+    environment:
+      # Beware YAML gotchas regarding quoting:
+      # With KEY: 'VALUE', quotes are part of yaml syntax and thus get stripped
+      # but with KEY='VALUE', they are part of the value and stay there,
+      # causing problems!
+      TZ: 'Europe/Paris'
+      SLEEP_TIME: '1m'
+      FILTER_SERVICES: ''
+      VERBOSE: 'true'
+      #UPDATE_OPTIONS: '--update-delay=30s'
+      #ROLLBACK_OPTIONS: '--rollback-delay=0s'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+networks:
+  web:
+    external: true
+  agent_network:
+    external: true
+```
+
+### Déployer Shepherd sur le cluster Swarm
+
+commentaire : pour déployer Shepherd, il est nécessaire de se connecter à Portainer,
+aller dans la section "Stacks" et cliquer sur "Add stack" pour ajouter une nouvelle
+stack. Il faut lui donner un nom ici "shepherd" et ensuite copier le contenu du fichier shepherd.compose.yml
+dans la section "Web editor" et cliquer sur "Deploy the stack" pour déployer Shepherd sur notre cluster Swarm.
+
+
+### Observation des logs
+
+commentaire : après le déploiement de Shepherd, on peut observer les logs.
+
+![shepherd-logs.png](images/shepherd/shepherd-logs.png)
+
+commentaire : En regardant les logs de Shepherd,
+on voit :
+
+`Trying to update service mfp_api with image ghcr.io/a5hura666/favorite_places_server:main No updates to service mfp_api!`
+
+Cela montre que Shepherd :
+- détecte bien le service mfp_api
+- vérifie l’image Docker associée
+- compare les versions disponibles
+- mais ne trouve aucune nouvelle image à déployer pour le moment
+
+On voit aussi que Shepherd effectue cette vérification automatiquement toutes les minutes :
+
+`Sleeping 1m before next update`
+
+Ce qui montre bien que le synchronisation toutes les minutes marchent !
+
+Et c'est normal on n'a fait encore aucun changement sur notre application MFP depuis le déploiement de Shepherd,
+mais dès que nous ferons un changement sur notre application MFP et que nous pousserons une nouvelle image Docker via le github action,
+Shepherd détectera automatiquement la nouvelle image Docker et mettra normalement à jour le service mfp_api avec la nouvelle image Docker sans que nous ayons besoin d'intervenir manuellement pour faire le déploiement de la nouvelle image Docker.
+
+### Tester le fonctionnement de Shepherd
+
+commentaire : pour tester le fonctionnement de Shepherd, il suffit de faire un changement sur notre application MFP,
+je vais donc changer le message de l'api qui retourne "Bonjour !" par "Hello !" dans le fichier Hello.ts.
+
+```typescript
+import { Router } from "express";
+
+const helloRouter = Router();
+
+helloRouter.get("/", (req, res) => {
+    res.status(200).send("Hello !");
+});
+
+export default helloRouter;
+```
+
+Ensuite, je push le code sur main pour que le github action puisse builder une nouvelle image Docker avec le changement que j'ai fait et la push sur GitHub.
+Après cela, il suffit d'attendre que Shepherd détecte la nouvelle image Docker et mette à jour le service mfp_api avec la nouvelle image Docker.
+On peut observer les logs de Shepherd pour voir le processus de mise à jour du service mfp_api avec la nouvelle image Docker.
+
+
