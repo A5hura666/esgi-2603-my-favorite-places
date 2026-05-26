@@ -758,6 +758,7 @@ export default helloRouter;
 
 Ensuite, je push le code sur main pour que le github action puisse builder une nouvelle image Docker avec le changement que j'ai fait et la push sur GitHub.
 Après cela, il suffit d'attendre que Shepherd détecte la nouvelle image Docker et mette à jour le service mfp_api avec la nouvelle image Docker.
-On peut observer les logs de Shepherd pour voir le processus de mise à jour du service mfp_api avec la nouvelle image Docker.
 
+![shepherd-deploiement.png](images/shepherd/shepherd-deploiement.png)
 
+commentaire : on peut voir avec la capture d'écran ci-dessus que Shepherd a détecté la nouvelle image Docker et a mis à jour le service mfp_api avec la nouvelle image Docker.
