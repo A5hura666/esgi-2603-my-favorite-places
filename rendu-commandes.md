@@ -576,6 +576,7 @@ jobs:
         run: |
           docker build \
             -t ghcr.io/a5hura666/favorite_places_server:latest \
+            -t ghcr.io/a5hura666/favorite_places_server:main \
             -t ghcr.io/a5hura666/favorite_places_server:sha-${{ steps.vars.outputs.sha_short }} \
             ./server
 
@@ -583,17 +584,20 @@ jobs:
         run: |
           docker build \
             -t ghcr.io/a5hura666/favorite_places_client:latest \
+            -t ghcr.io/a5hura666/favorite_places_client:main \
             -t ghcr.io/a5hura666/favorite_places_client:sha-${{ steps.vars.outputs.sha_short }} \
             ./client
 
       - name: Push backend image
         run: |
           docker push ghcr.io/a5hura666/favorite_places_server:latest
+          docker push ghcr.io/a5hura666/favorite_places_server:main
           docker push ghcr.io/a5hura666/favorite_places_server:sha-${{ steps.vars.outputs.sha_short }}
 
       - name: Push frontend image
         run: |
           docker push ghcr.io/a5hura666/favorite_places_client:latest
+          docker push ghcr.io/a5hura666/favorite_places_client:main
           docker push ghcr.io/a5hura666/favorite_places_client:sha-${{ steps.vars.outputs.sha_short }}
 ```
 
@@ -616,7 +620,7 @@ il est nécessaire d'ajouter une entrée dans le fichier host pour que l'applica
 ```YAML
 services:
   api:
-    image: ghcr.io/a5hura666/favorite_places_server:sha-4cbd855
+    image: ghcr.io/a5hura666/favorite_places_server:main
     networks:
       - web
       - app
