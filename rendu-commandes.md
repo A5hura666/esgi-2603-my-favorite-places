@@ -4,6 +4,348 @@ BOURGUIGNEAU
 ETHAN 
 M2 IW
 
+## Exercice 1 - Dockerization du projet :
+
+### Introduction du projet : my favorite place
+
+Commentaire : Impossible de lancer le projet, car il n'y a pas de base de données vu que le compose n'est pas créé. On verra par la suite du TP comment faire.
+
+### Dockerfile
+
+```DOCKERFILE
+FROM node:25.8.0-alpine3.23 AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+
+FROM node:25.8.0-alpine3.23
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+```
+
+### Compose YAML
+
+Création d'un fichier docker compose qui permettra d'avoir une base de données et ou l'application my favorite places pourra se connecter.
+
+```YAML
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: favorite_places_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - favorite_places_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  server:
+    build:
+      context: ./server
+    container_name: favorite_places_server
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: supersecret
+      DB_NAME: postgres
+    ports:
+      - "3000:3000"
+    networks:
+      - favorite_places_network
+
+  client:
+    build:
+      context: ./client
+    container_name: favorite_places_client
+    restart: always
+    ports:
+      - "5173:80"
+    networks:
+      - favorite_places_network
+
+volumes:
+  postgres_data:
+
+networks:
+  favorite_places_network:
+    driver: bridge
+```
+
+pour les credentials, je me suis aidé de la configuration dans le serveur :
+
+![configuration-bdd-server.png](images/Dockerization/configuration-bdd-server.png)
+
+PS : pour plus de sécurité, il faudrait ajouter un fichier d'environnement pour stocker les credentials de la DB.
+
+j'ai rajouté dans mon compose le depends_on qui me permet de faire en sorte que le serveur ne démarrer qu'après que la BDD soit prête.
+Et le restart: always permet lui de redémarer automatiquement les containers.
+
+### Test Bruno
+
+![bruno-create-user.png](images/Dockerization/bruno/bruno-create-user.png)
+
+![bruno-get-token.png](images/Dockerization/bruno/bruno-get-token.png)
+
+![bruno-me.png](images/Dockerization/bruno/bruno-me.png)
+
+## Exercice 2 - Mettre en place une CI :
+
+Voici le github-actions finale que j'ai créer pour le build des images docker du back et frontend
+
+```YAML
+name: MFP CI
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install backend dependencies
+        working-directory: ./server
+        run: npm install
+
+      - name: Run backend tests
+        working-directory: ./server
+        run: npm test
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get short SHA
+        id: vars
+        run: echo "sha_short=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/a5hura666/favorite_places_server:latest
+            ghcr.io/a5hura666/favorite_places_server:main
+            ghcr.io/a5hura666/favorite_places_server:sha-${{ steps.vars.outputs.sha_short }}
+
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/a5hura666/favorite_places_client:latest
+            ghcr.io/a5hura666/favorite_places_client:main
+            ghcr.io/a5hura666/favorite_places_client:sha-${{ steps.vars.outputs.sha_short }}
+```
+
+Création d'un test getDistance.ts
+
+J'ai créé un fichier getDistance.test.ts :
+
+```JS
+import {getDistance} from "../../utils/getDistance";
+
+
+describe('getDistance', () => {
+    it('should return 0 if points are identical', () => {
+        const point = { lat: 0, lng: 0 };
+        expect(getDistance(point, point)).toBeCloseTo(0);
+    });
+
+    it('should return correct distance between Paris and London', () => {
+        const paris = { lat: 48.8566, lng: 2.3522 };
+        const london = { lat: 51.5074, lng: -0.1278 };
+
+        const distance = getDistance(paris, london);
+        expect(distance).toBeCloseTo(343.56, 1);
+    });
+});
+```
+
+Ensuite dans mon package.json j'ai créé une nouvelle entrée de script "test" :
+
+```JSON
+{
+  "name": "server",
+  "version": "1.0.1",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "axios": "^1.13.5",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.19.0",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.11",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
+```
+
+Ce qui fait que quand on fera un npm test dans la CI 
+cela va lancer les tests que j'aurai setup 
+et que j'ai mis au-dessus ce qui me permet de venir tester mon code.
+
+## Exercice 3 - Vérifiez les images produites :
+
+Création d'un fichier compose.prod.yml qui est une copie de compose.yml 
+qu'on a créé précédemment mais cette fois ci on vient récupérer les images
+que l'on a build directement sur notre répôt GITHUB.
+
+```YAML
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: favorite_places_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: supersecret
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - favorite_places_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  server:
+    image: ghcr.io/a5hura666/favorite_places_server:latest
+    container_name: favorite_places_server
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: supersecret
+      DB_NAME: postgres
+    ports:
+      - "3000:3000"
+    networks:
+      - favorite_places_network
+
+  client:
+    image: ghcr.io/a5hura666/favorite_places_client:latest
+    container_name: favorite_places_client
+    restart: always
+    depends_on:
+      - server
+    ports:
+      - "5173:80"
+    networks:
+      - favorite_places_network
+
+volumes:
+  postgres_data:
+
+networks:
+  favorite_places_network:
+    driver: bridge
+```
+
+Voici une capture d'écran des images docker front et back créer dans mon répôt :
+
+![verification-images-docker.png](images/Dockerization/verification-images-docker.png)
+
+![image-docker-server.png](images/Dockerization/image-docker-server.png)
+
+
+## Exercice 1 : Docker Swarm
+
+L’architecture Docker-in-Docker (DinD) permet d’exécuter un démon Docker au sein d’un conteneur, créant ainsi un environnement Docker complètement distinct de l’hôte vous permettant de faire des tests ou proposer un environnement de formation. A l’opposé, l’architecture Docker-out-of-Docker (DooD) s’appuie sur le démon Docker de la machine hôte en ayant recours à un conteneur pour partager le socket Docker. Cela permet une solution plus légère et plus performante, mais beaucoup moins isolée.
+
+Pour tester Docker Swarm sur la base de DinD, on peut se créer plusieurs conteneurs DinD jouant le rôle de nœuds du cluster : un conteneur manager et plusieurs conteneurs worker. Chacun d’eux exécute son propre démon Docker et la communication entre les nœuds se fera via un réseau Docker. Cette solution permet de simuler un cluster Swarm complet sur une seule machine
+
 ## Exo 2-3 : Création du cluster Docker Swarm / Tests du cluster
 
 ### Création d'un cluster Swarm avec Docker Compose
@@ -762,3 +1104,29 @@ Après cela, il suffit d'attendre que Shepherd détecte la nouvelle image Docker
 ![shepherd-deploiement.png](images/shepherd/shepherd-deploiement.png)
 
 commentaire : on peut voir avec la capture d'écran ci-dessus que Shepherd a détecté la nouvelle image Docker et a mis à jour le service mfp_api avec la nouvelle image Docker.
+
+## Schéma de toutes les briques utilisées d'un push sur main jusqu'au déploiement de la nouvelle image Docker :
+
+![infrastructure-devops.png](images/infrastructure-devops.png)
+
+### Descriptif complet du schéma :
+
+#### CI — Intégration continue
+
+1. Développeur modifie le code et fait un git push sur la branche main 
+2. GitHub Actions est déclenché automatiquement par le push 
+3. Tests Jest s'exécutent — si KO, le pipeline s'arrête et le développeur corrige 
+4. Build Docker produit les images taguées :latest, :main 
+5. GHCR reçoit et stocke les nouvelles images
+
+#### CD — Déploiement continu
+
+6. Shepherd poll le GHCR toutes les 5 minutes et détecte la nouvelle image 
+7. Docker Swarm reçoit l'ordre de mise à jour et redéploie le service avec la nouvelle image 
+8. Portainer permet de visualiser et gérer les stacks Swarm via une interface web 
+9. Traefik route automatiquement le trafic HTTP vers le nouveau conteneur via mfp.swarm.localhost configurer dans le fichier host
+10. L'app MFP est accessible aux utilisateurs dans sa nouvelle version (dans le cadre du TP en local)
+
+#### Boucle de feedback (dans un cas de mise en prod réel)
+
+11. Testeurs / Utilisateurs détectent un bug ou suggèrent une amélioration → retour au développeur → nouveau cycle CI/CD
